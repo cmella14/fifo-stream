@@ -9,7 +9,6 @@ const { Router } = require('express');
  */
 function buildRouter(manager) {
   const router = Router();
-  router.use(require('express').json());
 
   // ── GET /api/streams ──────────────────────────────────────────────────────
   // List all streams with their current state.

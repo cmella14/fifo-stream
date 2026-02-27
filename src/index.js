@@ -39,6 +39,7 @@ manager.startAll();
 // ─── HTTP server ──────────────────────────────────────────────────────────────
 
 const app = express();
+app.use(express.json());
 
 // Health endpoint
 app.get('/health', (_req, res) => {
@@ -54,11 +55,20 @@ app.get('/health', (_req, res) => {
 // REST API
 app.use('/api', buildApiRouter(manager));
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server listening on port ${PORT}`, {
     health: `http://localhost:${PORT}/health`,
     api:    `http://localhost:${PORT}/api/streams`,
   });
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    logger.error(`Port ${PORT} is already in use. Set a different PORT in .env`);
+  } else {
+    logger.error('Server error', { err: err.message });
+  }
+  process.exit(1);
 });
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────

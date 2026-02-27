@@ -1,0 +1,18 @@
+{
+  "name": "fifo-stream",
+  "version": "1.0.0",
+  "description": "Multi-camera fault-tolerant video relay for football recording",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

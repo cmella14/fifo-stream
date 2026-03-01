@@ -30,6 +30,7 @@ class StreamRelay extends EventEmitter {
     this._fallbackProc = null;
     this._reconnectTimer = null;
     this._reconnectLiveTimer = null;
+    this._fallbackRestartTimer = null;
     this._stopped = false;
   }
 
@@ -44,6 +45,7 @@ class StreamRelay extends EventEmitter {
     this._stopped = true;
     this._clearReconnectTimer();
     this._clearReconnectLiveTimer();
+    this._clearFallbackRestartTimer();
     this._killProc(this._relayProc, 'relay');
     this._killProc(this._fallbackProc, 'fallback');
     this._relayProc = null;
@@ -71,14 +73,21 @@ class StreamRelay extends EventEmitter {
     this.emit('stateChange', { id: this.cfg.id, state: next });
   }
 
+  /** Returns a loggable version of ffmpeg args with the stream key redacted. */
+  _redactArgs(args) {
+    const key = this.cfg.output?.streamKey;
+    const str = ['ffmpeg', ...args].join(' ');
+    return key ? str.replace(key, '***') : str;
+  }
+
   _launchRelay() {
     if (this._stopped) return;
     this._setState(STATES.CONNECTING);
 
     const args = buildRelayArgs(this.cfg);
-    this.log.debug('Launching relay', { args: ['ffmpeg', ...args].join(' ') });
+    this.log.debug('Launching relay', { args: this._redactArgs(args) });
 
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     this._relayProc = proc;
 
     let wentLive = false;
@@ -94,14 +103,6 @@ class StreamRelay extends EventEmitter {
         this._setState(STATES.LIVE);
       }
       this.log.debug('ffmpeg[relay]', { line });
-    });
-
-    proc.stdout.on('data', (chunk) => {
-      if (!wentLive) {
-        wentLive = true;
-        this._clearReconnectLiveTimer();
-        this._setState(STATES.LIVE);
-      }
     });
 
     proc.on('exit', (code, signal) => {
@@ -127,6 +128,7 @@ class StreamRelay extends EventEmitter {
 
   _launchFallback() {
     if (this._stopped) return;
+    this._clearFallbackRestartTimer();
     this._killProc(this._fallbackProc, 'fallback');
 
     const snapshotPath = `/tmp/lastframe-${this.cfg.id}.jpg`;
@@ -134,9 +136,9 @@ class StreamRelay extends EventEmitter {
     const args = buildFallbackArgs(this.cfg, hasFrame);
 
     this.log.info('Launching fallback', { hasFrame });
-    this.log.debug('ffmpeg[fallback] args', { args: ['ffmpeg', ...args].join(' ') });
+    this.log.debug('ffmpeg[fallback] args', { args: this._redactArgs(args) });
 
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     this._fallbackProc = proc;
 
     proc.stderr.on('data', (chunk) => {
@@ -148,14 +150,20 @@ class StreamRelay extends EventEmitter {
       this.log.warn('Fallback exited unexpectedly, restarting', { code, signal });
       this._fallbackProc = null;
       // Restart fallback after a brief delay to avoid tight spin
-      setTimeout(() => this._launchFallback(), 2000);
+      this._fallbackRestartTimer = setTimeout(() => {
+        this._fallbackRestartTimer = null;
+        this._launchFallback();
+      }, 2000);
     });
 
     proc.on('error', (err) => {
       if (this._stopped) return;
       this.log.error('Fallback process error', { err: err.message });
       this._fallbackProc = null;
-      setTimeout(() => this._launchFallback(), 2000);
+      this._fallbackRestartTimer = setTimeout(() => {
+        this._fallbackRestartTimer = null;
+        this._launchFallback();
+      }, 2000);
     });
   }
 
@@ -201,11 +209,28 @@ class StreamRelay extends EventEmitter {
     }
   }
 
+  _clearFallbackRestartTimer() {
+    if (this._fallbackRestartTimer) {
+      clearTimeout(this._fallbackRestartTimer);
+      this._fallbackRestartTimer = null;
+    }
+  }
+
   _killProc(proc, label) {
     if (!proc) return;
     try {
       proc.kill('SIGTERM');
       this.log.debug(`Sent SIGTERM to ${label}`);
+      // Force kill if the process doesn't respond within 5 seconds
+      const t = setTimeout(() => {
+        try {
+          if (proc.exitCode === null && !proc.killed) {
+            proc.kill('SIGKILL');
+            this.log.warn(`Sent SIGKILL to ${label} (SIGTERM timeout)`);
+          }
+        } catch (_) {}
+      }, 5000);
+      t.unref();
     } catch (_) {}
   }
 }

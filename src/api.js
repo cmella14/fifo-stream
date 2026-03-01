@@ -40,6 +40,8 @@ function buildRouter(manager) {
     // Validation
     const errors = [];
     if (!id || typeof id !== 'string') errors.push('id (string) is required');
+    if (id && typeof id === 'string' && !/^[a-zA-Z0-9_-]{1,64}$/.test(id.trim()))
+      errors.push('id must be 1–64 characters: letters, digits, hyphens, or underscores');
     if (!name || typeof name !== 'string') errors.push('name (string) is required');
     if (!input?.protocol || !['srt', 'rtmp'].includes(input.protocol))
       errors.push('input.protocol must be "srt" or "rtmp"');

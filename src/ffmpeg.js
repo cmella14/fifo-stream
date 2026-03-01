@@ -18,12 +18,17 @@ function buildSrtRelayArgs(cfg) {
   const rtmpsUrl = `${CF_RTMPS_URL}/${output.streamKey}`;
   const snapshotPath = `/tmp/lastframe-${id}.jpg`;
 
-  const args = [
+  // When timecode is enabled, video must be re-encoded — copy is incompatible with -vf.
+  const relayVideoArgs = video.timecode
+    ? ['-vf', "drawtext=text='%{localtime}'", '-c:v', 'libx264', '-preset', 'ultrafast']
+    : ['-c:v', 'copy'];
+
+  return [
     '-loglevel', 'warning',
     '-i', srtUrl,
     // Output 1: relay to Cloudflare
     '-map', '0',
-    '-c:v', 'copy',
+    ...relayVideoArgs,
     '-c:a', 'aac', '-b:a', '128k',
     '-f', 'flv', rtmpsUrl,
     // Output 2: snapshot every 30s
@@ -33,12 +38,6 @@ function buildSrtRelayArgs(cfg) {
     '-update', '1',
     snapshotPath,
   ];
-
-  if (video.timecode) {
-    args.splice(args.indexOf('-map', 4) + 2, 0, '-vf', "drawtext=text='%{localtime}'");
-  }
-
-  return args;
 }
 
 /**

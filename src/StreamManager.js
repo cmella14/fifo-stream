@@ -90,8 +90,13 @@ class StreamManager {
       const raw = fs.readFileSync(RUNTIME_PATH, 'utf8');
       const data = JSON.parse(raw);
       if (!Array.isArray(data)) return [];
-      logger.info(`Loaded ${data.length} runtime stream(s) from ${RUNTIME_PATH}`);
-      return data;
+      const valid = data.filter((cfg) => cfg && typeof cfg.id === 'string' && cfg.output?.streamKey);
+      if (valid.length !== data.length) {
+        logger.warn('Some runtime stream entries were malformed and skipped',
+          { total: data.length, loaded: valid.length });
+      }
+      logger.info(`Loaded ${valid.length} runtime stream(s) from ${RUNTIME_PATH}`);
+      return valid;
     } catch (err) {
       if (err.code !== 'ENOENT') {
         logger.warn('Could not read runtime streams file', { err: err.message });
@@ -105,11 +110,9 @@ class StreamManager {
       .filter(([id]) => !this._staticIds.has(id))
       .map(([, cfg]) => cfg);
 
-    try {
-      fs.writeFileSync(RUNTIME_PATH, JSON.stringify(dynamic, null, 2));
-    } catch (err) {
-      logger.error('Could not save runtime streams file', { err: err.message });
-    }
+    fs.writeFile(RUNTIME_PATH, JSON.stringify(dynamic, null, 2), (err) => {
+      if (err) logger.error('Could not save runtime streams file', { err: err.message });
+    });
   }
 }
 

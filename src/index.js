@@ -44,12 +44,10 @@ app.use(express.json());
 // Health endpoint
 app.get('/health', (_req, res) => {
   const streams = manager.list();
-  const allLive = streams.every((s) => s.state === 'LIVE');
+  const allLive = streams.length > 0 && streams.every((s) => s.state === 'LIVE');
+  const status = streams.length === 0 ? 'idle' : allLive ? 'ok' : 'degraded';
 
-  res.status(allLive ? 200 : 207).json({
-    status: allLive ? 'ok' : 'degraded',
-    streams,
-  });
+  res.status(allLive || streams.length === 0 ? 200 : 207).json({ status, streams });
 });
 
 // REST API
@@ -76,7 +74,8 @@ server.on('error', (err) => {
 function shutdown(signal) {
   logger.info(`Received ${signal}, shutting down…`);
   manager.stopAll();
-  process.exit(0);
+  // Allow ffmpeg processes a moment to exit before Node terminates
+  setTimeout(() => process.exit(0), 3000);
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -1,7 +1,6 @@
 'use strict';
 
 const { spawn } = require('child_process');
-const fs = require('fs');
 const { EventEmitter } = require('events');
 const { buildRelayArgs, buildFallbackArgs } = require('./ffmpeg');
 const logger = require('./logger');
@@ -131,11 +130,9 @@ class StreamRelay extends EventEmitter {
     this._clearFallbackRestartTimer();
     this._killProc(this._fallbackProc, 'fallback');
 
-    const snapshotPath = `/tmp/lastframe-${this.cfg.id}.jpg`;
-    const hasFrame = fs.existsSync(snapshotPath);
-    const args = buildFallbackArgs(this.cfg, hasFrame);
+    const args = buildFallbackArgs(this.cfg);
 
-    this.log.info('Launching fallback', { hasFrame });
+    this.log.info('Launching fallback (black video)');
     this.log.debug('ffmpeg[fallback] args', { args: this._redactArgs(args) });
 
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });

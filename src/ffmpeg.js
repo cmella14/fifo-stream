@@ -17,19 +17,24 @@ function buildSrtRelayArgs(cfg) {
   const srtUrl = `srt://0.0.0.0:${input.port}?mode=listener&latency=200`;
   const rtmpsUrl = `${CF_RTMPS_URL}/${output.streamKey}`;
   const snapshotPath = `/tmp/lastframe-${id}.jpg`;
+  const width   = video.width   || 1920;
+  const height  = video.height  || 1080;
+  const fps     = video.fps     || 25;
+  const bitrate = video.bitrate || '4000k';
 
-  // When timecode is enabled, video must be re-encoded — copy is incompatible with -vf.
-  const relayVideoArgs = video.timecode
-    ? ['-vf', "drawtext=text='%{localtime}'", '-c:v', 'libx264', '-preset', 'ultrafast']
-    : ['-c:v', 'copy'];
+  const vf = video.timecode
+    ? `scale=${width}:${height},drawtext=text='%{localtime}'`
+    : `scale=${width}:${height}`;
 
   return [
     '-y',
     '-loglevel', 'warning',
     '-i', srtUrl,
-    // Output 1: relay to Cloudflare
+    // Output 1: relay to Cloudflare — re-encode to enforce resolution, fps and bitrate
     '-map', '0',
-    ...relayVideoArgs,
+    '-vf', vf,
+    '-c:v', 'libx264', '-preset', 'ultrafast',
+    '-b:v', bitrate, '-r', String(fps),
     '-c:a', 'aac', '-b:a', '128k',
     '-f', 'flv', rtmpsUrl,
     // Output 2: snapshot every 30s
@@ -50,15 +55,25 @@ function buildRtmpRelayArgs(cfg) {
   const rtmpUrl = `rtmp://0.0.0.0:${input.port}/live`;
   const rtmpsUrl = `${CF_RTMPS_URL}/${output.streamKey}`;
   const snapshotPath = `/tmp/lastframe-${id}.jpg`;
+  const width   = video.width   || 1920;
+  const height  = video.height  || 1080;
+  const fps     = video.fps     || 25;
+  const bitrate = video.bitrate || '4000k';
 
-  const args = [
+  const vf = video.timecode
+    ? `scale=${width}:${height},drawtext=text='%{localtime}'`
+    : `scale=${width}:${height}`;
+
+  return [
     '-y',
     '-loglevel', 'warning',
     '-listen', '1',
     '-i', rtmpUrl,
-    // Output 1: relay to Cloudflare
+    // Output 1: relay to Cloudflare — re-encode to enforce resolution, fps and bitrate
     '-map', '0',
-    '-c:v', 'copy',
+    '-vf', vf,
+    '-c:v', 'libx264', '-preset', 'ultrafast',
+    '-b:v', bitrate, '-r', String(fps),
     '-c:a', 'aac', '-b:a', '128k',
     '-f', 'flv', rtmpsUrl,
     // Output 2: snapshot every 30s
@@ -68,8 +83,6 @@ function buildRtmpRelayArgs(cfg) {
     '-update', '1',
     snapshotPath,
   ];
-
-  return args;
 }
 
 /**

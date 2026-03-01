@@ -24,6 +24,7 @@ function buildSrtRelayArgs(cfg) {
     : ['-c:v', 'copy'];
 
   return [
+    '-y',
     '-loglevel', 'warning',
     '-i', srtUrl,
     // Output 1: relay to Cloudflare
@@ -51,6 +52,7 @@ function buildRtmpRelayArgs(cfg) {
   const snapshotPath = `/tmp/lastframe-${id}.jpg`;
 
   const args = [
+    '-y',
     '-loglevel', 'warning',
     '-listen', '1',
     '-i', rtmpUrl,
